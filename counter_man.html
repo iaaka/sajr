@@ -1,0 +1,412 @@
+<!--#include file="design/start.html"-->
+<h1>Manual</h1>
+<div align="right" style="font-size: 8pt">
+garbage in - garbage out
+</div>
+<ul>
+	<li><a href="#gettingstarted">Getting started</a></li>
+	<li><a href="#howitworks">How it works</a></li>
+	<ul>
+		<li><a href="#pairing">Read pairing</a></li>
+		<li><a href="#read2gene">Read to gene assignment</a></li>
+		<li><a href="#seg">Segment read count</a></li>
+		<li><a href="#ir">Inclusion ratio calculation</a></li>
+	</ul>
+	<li><a href="#annotation">Annotation format</a></li>
+	<li><a href="#options">Options</a></li>
+	<li><a href="#output">Output</a></li>
+	<li><a href="#exceptions">Exceptions</a></li>
+</ul>
+<a name="gettingstarted"></a>
+<h2>Getting started</h2>
+<p>
+The simplest way to start is to download example from download page and follow instructions. But if you know what you need you can download only program itself.
+Just download sajr.jar and sajr.config files from download page. Put them to the one folder, set in, out_base, ann_in parameters (and other if necessary) in sajr.config and run:
+<br><span class="codetext">java -jar sajr.jar count_reads.</span>
+<br>Read counter needs annotation in <a href="#annotation">SAJR format</a>. Use <a href="ann_converter.html">annotation converter</a> to transfroms annotation from gtf or gff3 to SAJR format.
+</p>
+<p align="justify">
+To install R-part of SAJR, run <span class="codetext">install.packages("http://storage.bioinf.fbb.msu.ru/~mazin/files/SAJR.tar.gz", repos = NULL, type = "source")</span> command in R.<br>
+Then call: 
+</p>
+<ul>
+	<li><b>loadSAData</b> function to load the data (output SAJR read counter). Segments and/or samples can be filtered by subset ('[') operator (for details see example.R).
+	<li><b>plotMDS</b> or <b>plotCorrHM</b> to represent your data as two-dimensial MDS-plot or to make correlation heatmap
+	<li><b>fitSAGLM</b> to fit GLM model
+	<li><b>calcSAPvalue</b> to calculate p-value using binomial or quasibinomal (to account for biological variability) distribution. Alternatively option <i>return.pv</i> in <b>fitSAGLM</b> can be used.
+	<li><b>clustSegs</b> to make hierarchial clustering of segment and show clusters as boxplots 
+</ul>
+<p>
+Please, do not forget to read function documentation! Thank you!</p>
+<a name="howitworks"></a>
+<h2>How it works</h2>
+<a name="pairing"></a>
+<h3>Reads pairing</h3>
+<p align="justify">
+If option paired is not 0, then SAJR tries to find mate for each read. First SAJR checks whether read name ends with [;\/][12] and, if true, truncates it.
+Then SAJR collects all mapping locations with the same read name, and makes all possible read pairs that allowed by bam 'mate reference' and 'mate alignment start' fields.
+If reads have multiple locations (and multiple reads are allowed), all possible pairs are processed as different reads.
+</p>
+<a name="read2gene"></a>
+<h3>Read to gene assignment</h3>
+<p>
+If read contains junction, it is assigned to gene the junction from. 
+If one of junctions does not exist in annotation and 
+<span class="codetext">look_for_gene_for_unknown_junctions</span> is true, SAJR tries to 
+find gene[s] that contains both splice sites (extracted from annotated introns) that the unknown junction uses.
+If there are such gene[s], junction will be added to them and will treated as annotated in the future.
+If there are still unknown junction, read either skipped or used depending on option 
+<span class="codetext">use_reads_with_unknown_junctions</span>.
+If read contains several junctions it is assigned to either genes that contain all junction or to all genes 
+that contains at least one junction (see option <span class="codetext">only_junstions_from_same_gene</span>).  
+If read have junction but cannot be assigned to gene it is skipped.</p>
+<p>
+If read do not have junction it is linked to all overlaped genes.
+</p> 
+<a name="seg"></a>
+<h3>Segment read count</h3>
+<p>
+Since read is assigned to gene, it is assigned to all segments that it overlaps by at least one nt. Then following things are checked:
+</p>
+<ul>
+	<li>Whether read overlaps with at least one intron (both constitutive and retained)
+	<li>Whether read overlaps with at least one ALT or EXN segment
+	<li>Whether read overlaps with more than one segment (i.e. crosses border of segments and, then, confirms mode of splice site usage)
+</ul>
+<p>
+If at least one gene where read overlap ALT or EXN segment exists, read is unassigned from all genes where it overlaps only introns (it allows to work with nested genes).
+Then depending on settings <span class="codetext">count_only_border_reads</span> and <span class="codetext">count_intron_reads</span> read is counted to segment and introns or not:
+<br>Read is counted to segment if:
+</p> 
+<ul>
+	<li>Segment is retained intron AND (read overlap more than one segment OR <span class="codetext">count_only_border_reads</span> == false)
+	<li>(Read do not overlap introns OR <span class="codetext">count_intron_reads==false</span>) AND (read overlap more than one segment OR <span class="codetext">count_only_border_reads</span> == false)
+</ul>								
+<p>
+Read is counted to gene if it overlap at least one EXN segment (INTERNAL if <span class="codetext">count_only_internal</span>==true) AND (read do not overlap introns OR <span class="codetext">count_intron_reads</span>==false).
+Read is counted to intron (junction) if it counted to any of ALT or EXN segments.<br>
+Then, reads mapped to all junction that span given segment (from the same gene) are summed and considered as exclusion reads for the segment.<br>
+</p>
+<p>
+In case of alternative first/last exon, all junction reads that links first/last exon (segment) to the rest of the gene are counted (<i>i+e</i>). Only junction reads that links this particular exon to the rest of the gene are considered as inclusion reads for the exon (<i>i</i>). By subtraction <i>i</i> from sum described before exclusion reads could be counted: <i>(i+e) - i = e</i>.   				
+</p>
+<a name="ir"></a>
+<h3>Inclusion ratio calculation</h3>
+<p>
+Since we have number of inclusion reads (<i>i</i>), number of exclusion reads (<i>e</i>), length of read <i>lr</i> and length of segment <i>ls</i> we can calculate inclusion ratio <i>psi</i>:
+</p>
+<img alt="inclusion ratio formula" src="files/ir_form.png" height="150">
+<p>
+For alternative first and last exons inclusion ratio is calculated simply as <i>i/(i+e)</i>
+</p>
+<a name="annotation"></a>
+<h2>Annotation format</h2>
+<p align="justify">
+SAJR requires two things to work: exon-introns annotation and bam file. While everybody have bams, annotation is a bit more complicated. This section describes SAJR annotation requirements.
+Annotation should be in gff format and contain three types of features:
+</p>
+<ul>
+	<li>Genes
+	<li>Segments, genome region between two nearest splice sites and/or leftmost TSS and rightmost polyA site
+	<li>Introns (or junctions), genome region from first to last nt of intron
+</ul>
+<p align="justify">  
+Features should be sorted by chromosome (contig, scaffold etc) ID. Introns and segments should follow its gene and be placed before the next gene.
+Genes and segments should have unique ids (gene_id,segment_id), it will be used in output. 
+Each segment should have type {EXN,ALT,INT} and position (FIRST,LAST,INTERNAL,ONLY).
+Since there are many crazy annotations (ones where genes could share introns for example), 
+introns will be identified by coordinates rather than by ids in output, 
+segments, even if they are completely equal in two genes, will be considered separately. 
+All lines started with '#' will be ignored.</p>
+<p align="justify">  
+Currently SAJR do not support alternative TSS and alternative polyA analysis if they aren't supplied by alternative splice site usage. So, if first (last) exon have more than one alternative TSS (polyA) only one of them should be used in annotation.
+If you have problems with transforming of your annotation to SAJR annotation, do not hesitate to contact me.<br>
+Segments type denotes whether segment is:
+</p>
+<ul>
+	<li>Constitutive (included in all transcripts, <b>EXN</b>)
+	<li>Alternative (included in some transcripts, <b>ALT</b>)
+	<li>Retained introns (subset of alternative segments that exactly coincide with intron, <b>INT</b>)
+</ul>
+Segment position denotes segment position within gene:
+<ul>
+	<li>First segment (left (by transcript) border of the segment is TSS, <b>FIRST</b>)
+	<li>Internal segment (both borders of of the segment are splice sites, <b>INTERNAL</b>)
+	<li>Last segment (right (by transcript) border of the segment is polyA site, <b>LAST</b>)
+	<li>Only segment (only segment of single exon gene, <b>ONLY</b>)
+</ul>
+Example of annotation file:
+<div class="codediv">chr11	db	gene	134022397	134038092	0	-	.	gene_id=313339
+chr11	db	segment	134022397	134022947	0	-	.	gene_id=313339; segment_id=3053829; type=EXN; position=LAST
+chr11	db	segment	134022948	134023034	0	-	.	gene_id=313339; segment_id=2965567; type=INT; position=INTERNAL
+chr11	db	segment	134031676	134031786	0	-	.	gene_id=313339; segment_id=2550664; type=EXN; position=INTERNAL
+chr11	db	segment	134029787	134029969	0	-	.	gene_id=313339; segment_id=2550663; type=EXN; position=INTERNAL
+chr11	db	segment	134027823	134027962	0	-	.	gene_id=313339; segment_id=2550661; type=ALT; position=INTERNAL
+chr11	db	segment	134023035	134023095	0	-	.	gene_id=313339; segment_id=2550657; type=EXN; position=INTERNAL
+chr11	db	segment	134037891	134038092	0	-	.	gene_id=313339; segment_id=3053832; type=EXN; position=FIRST
+chr11	db	segment	134023184	134023258	0	-	.	gene_id=313339; segment_id=2550659; type=EXN; position=INTERNAL
+chr11	db	segment	134028224	134028390	0	-	.	gene_id=313339; segment_id=2550662; type=EXN; position=INTERNAL
+chr11	db	segment	134026913	134026990	0	-	.	gene_id=313339; segment_id=2550660; type=EXN; position=INTERNAL
+chr11	db	segment	134023096	134023183	0	-	.	gene_id=313339; segment_id=2550658; type=INT; position=INTERNAL
+chr11	db	intron	134031787	134037890	0	-	.	gene_id=313339
+chr11	db	intron	134029970	134031675	0	-	.	gene_id=313339
+chr11	db	intron	134028391	134029786	0	-	.	gene_id=313339
+chr11	db	intron	134027963	134028223	0	-	.	gene_id=313339
+chr11	db	intron	134026991	134027822	0	-	.	gene_id=313339
+chr11	db	intron	134026991	134028223	0	-	.	gene_id=313339
+chr11	db	intron	134023259	134026912	0	-	.	gene_id=313339
+chr11	db	intron	134023096	134023183	0	-	.	gene_id=313339
+chr11	db	intron	134022948	134023034	0	-	.	gene_id=313339
+</div>
+<a name="options"></a>
+<h2>Options</h2>
+<p align="justify">
+	Most of SAJR parameters are placed within configuration file, default file is sajr.config, but it can be overwritten by second parameter in command line.
+	All parameters in configuration file could be also overwritten in command line in form of -name=value. For example:
+<br>
+<span class="codetext">java -jar sajr.jar count_reads my.settings -in=my.bam</span>
+<br>
+will use my.settings instead of sajr.config and use my.bam as input file. If my.settings is omitted in command above, sajr.config with my.bam as input will be used.
+In default configuration file, parameters are separated into groups by html-like tags. It was done just to organize parameters and makes no sense for program, but regulates which options will be printed to the output files. For count_reads method, parameters from common and read_counter group will be printed.
+<br>Through config parsing, all tabs will be removed, any empty lines or lines started with '#' will be skipped as well as html-like tags.
+<br>Each parameter in file should be in following form:<br> 
+<span class="codetext">name: value; (space after comma is required)</span><br>
+All text after ';' will be ignored.
+Duplicate parameters are allowed, only last entry will be used.
+</p>
+<table border="1">
+	<tr align="center">
+		<td>Option
+		</td>
+		<td>Type
+		</td>
+		<td>Default
+		</td>
+		<td>Definition
+		</td>
+	</tr>
+	<tr>
+		<td>batch_in
+		</td>
+		<td>string
+		</td>
+		<td>null
+		</td>
+		<td>for batch processing. Multiple input files could be supplied separated by comma. Skipped if null, overwrites <span class='codetext'>in</span> parameter otherwise.
+		</td>
+	</tr>
+	<tr>
+		<td>batch_out
+		</td>
+		<td>string
+		</td>
+		<td>null
+		</td>
+		<td>for batch processing. Multiple output file bases could be supplied separated by comma. Skipped if null, overwrites <span class='codetext'>out_base</span> otherwise. Should contain the same nimber of files as batch_in
+		</td>
+	</tr>
+	<tr>
+		<td>debug
+		</td>
+		<td>boolean
+		</td>
+		<td>true
+		</td>
+		<td>prints more detailed error messages if any
+		</td>
+	</tr>
+	<tr>
+		<td>verbose
+		</td>
+		<td>boolean
+		</td>
+		<td>true
+		</td>
+		<td>prints warnings (if suppress_warnings is false) and read statistics to std
+		</td>
+	</tr>
+	<tr>
+		<td>suppress_warnings
+		</td>
+		<td>boolean
+		</td>
+		<td>false
+		</td>
+		<td>suppress printing of warnings
+		</td>
+	</tr>
+	<tr>
+		<td>in
+		</td>
+		<td>string
+		</td>
+		<td>-
+		</td>
+		<td>input file. Should be bam or sam.
+		</td>
+	</tr>
+	<tr>
+		<td>stranded
+		</td>
+		<td>integer
+		</td>
+		<td>0
+		</td>
+		<td>defines whether library has strand information. 0 if unstranded, 1 if read is from transcript strand and -1 is read is from complementary strand. If reads are paired, the settings defines strand of the first mate.
+		</td>
+	</tr>
+	<tr>
+		<td>paired
+		</td>
+		<td>integer
+		</td>
+		<td>0
+		</td>
+		<td>defines library type. 0 if unpaired, 1 if paired and reads are on opposite strands, -1 if paired but both mates on the same strand (probably there are no such data, but who cares?).
+		</td>
+	</tr>
+	<tr>
+		<td>use_mult
+		</td>
+		<td>boolean
+		</td>
+		<td>true
+		</td>
+		<td>use reads mapped to multiple locations (according to NH attribute in bam file) 
+		</td>
+	</tr>
+	
+	<tr>
+		<td>use_singletons
+		</td>
+		<td>true
+		</td>
+		<td>boolean
+		</td>
+		<td>use singletons, i.e. reads with unmapped mate or unmapped reads if they are mixed with paired ones. Has no effect if paired=0  
+		</td>
+	</tr>
+	<tr>
+		<td>gene_black_list
+		</td>
+		<td>string
+		</td>
+		<td>-
+		</td>
+		<td>gene with ids mentioned in this parameter will not be used. Gene ids should be separated by '@' symbol, since it is likely to never meets in gene ids.
+		</td>
+	</tr>
+	<tr>
+		<td>exception2warn
+		</td>
+		<td>boolean
+		</td>
+		<td>true
+		</td>
+		<td>transforms non-crucial exceptions to warning. for list of non-crucial exceptions see below  
+		</td>
+	</tr>
+	<tr>
+		<td>ann_in
+		</td>
+		<td>string
+		</td>
+		<td>-
+		</td>
+		<td>input annotation file in gff format. See above for specification
+		</td>
+	</tr>
+	<tr>
+		<td>count_only_border_reads
+		</td>
+		<td>false
+		</td>
+		<td>boolean
+		</td>
+		<td>count only reads that crosses border of the segment for segment inclusion reads, see 'how it works' section for details 
+		</td>
+	</tr>
+	<tr>
+		<td>count_intron_reads
+		</td>
+		<td>boolean
+		</td>
+		<td>false
+		</td>
+		<td>count reads that overlap introns (including retained ones) for gene and ALT or EXN segment counts
+		</td>
+	</tr>
+	<tr>
+		<td>count_only_internal
+		</td>
+		<td>boolean
+		</td>
+		<td>true
+		</td>
+		<td>use only INTERNAL (not FIRST and LAST) constitutive segments (including ONLY ones) to count gene counts.
+		</td>
+	</tr>
+	<tr>
+		<td>look_for_gene_for_unknown_junctions
+		</td>
+		<td>boolean
+		</td>
+		<td>false
+		</td>
+		<td>if meet unknown junction, try to find gene[s] that have the same splice sites that junction does. Adds it to annotation and treat in the same way as annotated one.
+		</td>
+	</tr>
+	<tr>
+		<td>use_reads_with_unknown_junctions
+		</td>
+		<td>boolean
+		</td>
+		<td>true
+		</td>
+		<td>use reads that contains junctions that aren't from supplied annotation
+		</td>
+	</tr>
+	<tr>
+		<td>only_junstions_from_same_gene
+		</td>
+		<td>boolean
+		</td>
+		<td>false
+		</td>
+		<td>don't use reads that contains two or more junctions that never meet in one gene in supplied annotation
+		</td>
+	</tr>
+	<tr>
+		<td>effective_read_length
+		</td>
+		<td>integer
+		</td>
+		<td>100
+		</td>
+		<td>If reads are unpaired it is just length of read. If reads are paired it should be something between sum of lengths of mates and length of whole fragment. Affects inclusion ratio calculation
+		</td>
+	</tr>
+</table>
+<a name="output"></a>
+<h2>Output</h2>
+<a name="details"></a>
+Output files are tab-delimited tables.
+Some information is printed in header of each file. Header lines start with '#'.<br>				 
+Three output files will produced:
+<ul>
+	<li>{out_base}.gene contains gene counts in following format: gene_id&nbsp;count
+	<li>{out_base}.intron contains intron (junction) counts in following format: chr_id:start-stop[:strand]&nbsp;count. Strand is printed only if library was stranded.
+	<li>{out_base}.segment contains segment counts and inclusion ratio in following format: segment_id&nbsp;inclusion counts&nbsp;exclusion counts&nbsp;inclusion ratio
+</ul>
+<h2>Non-crucial exceptions</h2>
+<a name="exceptions"></a>	
+<p>There are several exceptions that aren't crucial, but could point to some problems in input data.
+Now, only one such exception exists:
+</p>
+<ul>
+<li>Bam entry without NH (number of hit) attribute. If <span class='codetext'>exception2warn==true</span> read will be treated as uniquely mapped (even if there are more than one locations in bam file).
+</ul>
+<p>
+But in the future this list could be extended.
+</p>	
+<!--#include file="design/end.html"-->

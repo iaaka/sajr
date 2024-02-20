@@ -1,7 +1,7 @@
 # SAJR
 SAJR is R-package to perform alternative splicing quantification and differentiall splicing analysis using bulk RNA-seq data. SAJR pipeline consists of two steps:
 1. Preparation of annotation. SAJR uses annotation in its own gff-based format. To convert `gtf` or `gff3` into format acceptable use `gff2sajr` or `gff32sajr` methods (see below).
-2. Counting reads using java-written read-counter. It takes bams and annotation in gff format as input and produces text files with read counts. Read-counter can be found here: https://github.com/iaaka/sajr-java. 
+2. Counting reads using java-written read-counter. It takes bams and annotation in gff format as input and produces text files with read counts.
 3. Differentiall (and other downstream) analysis using R-package from this repository. It take gtf and output from read-counter as input.
 
 # Installation
@@ -9,7 +9,7 @@ R-package can be installed from within R-session by
 ```
 devtools::install_github('iaaka/sajr')
 ```
-The precompiled read-counter jar and config can be downloaded from github by
+The precompiled read-counter jar and config can be downloaded from [github](https://github.com/iaaka/sajr-java) by
 ```
 wget https://github.com/iaaka/sajr-java/raw/main/sajr.jar
 wget https://github.com/iaaka/sajr-java/raw/main/sajr.config

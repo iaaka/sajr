@@ -56,6 +56,30 @@ java -jar sajr.jar count_reads my.config \
   -count_only_border_reads=true
 ```
 For parameters please see detailed [manual](https://htmlpreview.github.io/?https://raw.githubusercontent.com/iaaka/sajr/main/counter_man.html).
+## Sajrcomp
+Sajrcomp provides comparing two annotation files (gff) and returns the overlapping for features.
+```
+java -jar sajr.jar sajrcomp -comp_ann1=ann1 \
+  -comp_ann2=ann2 \
+  -comp_out=output.tsv
+```
+Output
+A signle file with four columns:
+
+    gene_id1 - gene identifier from comp_ann1
+    gene_id2 - gene identifier from comp_ann2
+    class - class of overlap (see below)
+    number of introns: in gene from comp_ann1, from comp_ann2 and common 
+
+Overlap classes
+
+    = - both genes have exactly the same set of junctions
+    c - junctions of one gene are subset of junctions of other one
+    j - genes share some junctions
+    e - genes overlap by exons in sense
+    i - one gene is within intron of other one (in sense)
+    a - one gene is within intron of other one (in antisense)
+    x - genes overlap by exons in antisense
 ## R-package
 See [tutorial](tutorial/tutorial.R).
 # Citing SAJR

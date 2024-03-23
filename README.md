@@ -57,9 +57,10 @@ java -jar sajr.jar count_reads my.config \
 ```
 For parameters please see detailed [manual](https://htmlpreview.github.io/?https://raw.githubusercontent.com/iaaka/sajr/main/counter_man.html).
 ## Sajrcomp
-Sajrcomp provides comparing two annotation files (gff) and returns the overlapping for features.
+Sajrcomp takes two annotation files in SAJR-format (gff), provides comparing of features and returns the counts of features overlapping.
 ```
-java -jar sajr.jar sajrcomp -comp_ann1=ann1 \
+java -jar sajr.jar sajrcomp \
+  -comp_ann1=ann1 \
   -comp_ann2=ann2 \
   -comp_out=output.tsv
 ```
